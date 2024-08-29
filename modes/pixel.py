@@ -1,21 +1,21 @@
-import numpy as np
+import torch
 
-def Pixel(x, y):
+def Pixel(xx, yy):
                 
 
-    nx, ny = np.size(x), np.size(y)
-    xx,yy  = np.meshgrid(x,y)
-
-    rr = ((xx)**2+(yy)**2)**.5
+    nx, ny = xx.shape[0], xx.shape[1]
 
 
-    U = np.zeros((nx*ny,nx,ny))
-    for i in np.arange(nx):
-        for k in np.arange(ny):
+    U = torch.zeros((nx*ny,nx,ny))
+    for i in torch.arange(nx):
+        for k in torch.arange(ny):
             U[i*ny+k,i,k] = 1
 
     
-    dUdx, dUdy = np.gradient(U, axis=(1,2))
+    dUdx, dUdy = torch.gradient(U, axis=(1,2))
 
+    # size = xx.shape
+    # dUdy /= (size[0] - 1)/2
+    # dUdx /= (size[1] - 1)/2
 
     return(U, dUdx, dUdy)
