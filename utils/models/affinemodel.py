@@ -3,7 +3,6 @@ from torch import nn
 import torch.nn.functional as F
 
 
-
 class AffineTransformModel(nn.Module):
     '''
     A model that can apply seperate rotations and translations in certain regions. 

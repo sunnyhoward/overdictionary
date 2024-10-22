@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 
 def Vortex(m, xx, yy, x0=0, y0=0, truncate_circle = True):

@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 
 def Zernike(n_zernike_row, xx, yy, x0=0, y0=0, truncate_circle = False):
