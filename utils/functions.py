@@ -10,24 +10,10 @@ import torch
 from sklearn import linear_model
 
 
-def clean_gradient(sampled_gradient, threshold = .6):
-    '''sampled_gradient is (2,wl,x,y)''' 
-
-    nans = np.isnan(sampled_gradient)
-    ffted = np.fft.fftshift(np.fft.fft2(np.nan_to_num(sampled_gradient), axes=(-2,-1)),axes=(-2,-1))
-    x = np.linspace(-1,1,ffted.shape[-1])
-    y = np.linspace(-1,1,ffted.shape[-2])
-    xx, yy = np.meshgrid(x, y)
-    mask = (xx)**2 + (yy)**2 < threshold**2
-    ffted *= mask[None,None]
-
-    sampled_gradient_clean = np.real(np.fft.ifft2(np.fft.ifftshift(ffted,axes=(-2,-1)), axes=(-2,-1)))
-
-    sampled_gradient_clean[nans] = np.nan
-    return sampled_gradient_clean
 
 
 def get_modes_and_derivs(offset, xx, yy, n_zernike=3, truncate_circle=False, pixel_basis = True):
+    # simply return the mode and derivs for zernikes, vortex and pixel basis, for a given offset.
     x0,y0 = offset
 # 
     zer, dzerdx, dzerdy = Zernike(n_zernike,xx,yy,x0,y0,truncate_circle=truncate_circle)
@@ -80,3 +66,20 @@ def LassoFit(sampled_gradient, mode_gradients, alpha = .01):
 
     return wavefront_grad_prediction, result_vector
 
+
+
+def clean_gradient(sampled_gradient, threshold = .6):
+    '''sampled_gradient is (2,wl,x,y)''' 
+
+    nans = np.isnan(sampled_gradient)
+    ffted = np.fft.fftshift(np.fft.fft2(np.nan_to_num(sampled_gradient), axes=(-2,-1)),axes=(-2,-1))
+    x = np.linspace(-1,1,ffted.shape[-1])
+    y = np.linspace(-1,1,ffted.shape[-2])
+    xx, yy = np.meshgrid(x, y)
+    mask = (xx)**2 + (yy)**2 < threshold**2
+    ffted *= mask[None,None]
+
+    sampled_gradient_clean = np.real(np.fft.ifft2(np.fft.ifftshift(ffted,axes=(-2,-1)), axes=(-2,-1)))
+
+    sampled_gradient_clean[nans] = np.nan
+    return sampled_gradient_clean

@@ -32,7 +32,8 @@ class AffineTransformModel(nn.Module):
         '''
         x will be the mode derivatives, in shape (modes,2, nx,ny)
 
-        #now instead of just 2 grids, we have 2n. Lets say the first n are for the zerns. 
+        #We have 2n grids for the affine model, where n is num initializations.
+        #The first n are for the zerns. The second n are for the special mode.
 
         '''
         no_modes, s, sizex, sizey = x.size()

@@ -1,5 +1,3 @@
-# the same as modalevaluator.py, but here i fit multiple initializations of coefficients and affine params at once.
-
 import os, sys, h5py
 main_dir = os.path.abspath('../../../')
 sys.path.append(main_dir)
@@ -31,11 +29,11 @@ class ModalEvaluator:
         dictionary, dictionary_grads = get_modes_and_derivs(offset=[0,0], xx=xx_pad, yy=yy_pad, n_zernike=n_zernike_rows, truncate_circle=False, pixel_basis = False)
         self.dictionary_grads = dictionary_grads.permute(1,0,2,3).to(device) / microlens_pitch# (modes,2,nx,ny) 
         self.dictionary = dictionary[:,None].to(device) # (modes,1,nx,ny)
-        
         self.no_modes = len(dictionary)
+
+        #create pixel basis
         self.pixel_basis = pixel_basis
         if pixel_basis:
-            #create pixel basis
             pix, pix_grads = get_pixel_basis(self.sizex, self.sizey)
             self.pix_grads = pix_grads.permute(1,0,2,3).to(device) / microlens_pitch# (modes,2,nx,ny)
             self.pix = pix[None].to(device) # (1,modes,nx,ny)
@@ -62,15 +60,16 @@ class ModalEvaluator:
 
         we can continue training with fit_params not None
         '''
-        self.aff_model = AffineTransformModel(rot=0., transX=-0., transY=-0., initializations = self.initializations, scale=False).to(self.device)
-
+        # first prepare the measured wavefront derivatives
         norm_factor = np.abs(np.nan_to_num(wavefront_derivs)).max()
         wavefront_derivs = wavefront_derivs / norm_factor
 
-        t = wavefront_derivs.reshape(-1,1)
-        t = torch.tensor(t).permute(1,0).tile(self.initializations,1).float().to(self.device)
-        notnans = ~torch.isnan(t)
+        wavefront_derivs = wavefront_derivs.reshape(-1,1)
+        wavefront_derivs = torch.tensor(wavefront_derivs).permute(1,0).tile(self.initializations,1).float().to(self.device)
+        notnans = ~torch.isnan(wavefront_derivs)
 
+        # now set up the affine model and the coefficients
+        self.aff_model = AffineTransformModel(rot=0., transX=-0., transY=-0., initializations = self.initializations, scale=False).to(self.device)
         if fit_params is None:
             coefficients = torch.nn.Parameter(torch.rand(self.initializations,self.no_modes).to(self.device))
         else:
@@ -78,11 +77,13 @@ class ModalEvaluator:
             coefficients = torch.nn.Parameter(coefficients.to(self.device) / norm_factor)
             self.aff_model.set_theta(fit_params['theta'])
 
+        # training loop
+
         history2 = {} 
         history2['loss'] = []
 
-        all_params = list(self.aff_model.parameters()) + [coefficients]
 
+        all_params = list(self.aff_model.parameters()) + [coefficients]
         optimizer = torch.optim.Adam(all_params, lr=lr)
         loss_fn = torch.nn.MSELoss()
 
@@ -90,13 +91,14 @@ class ModalEvaluator:
 
             optimizer.zero_grad()
 
+            # take the modes and shift according to affine params.
             all_grads = self.aff_model(self.dictionary_grads)[...,self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2]
             
-            if self.pixel_basis: all_grads = torch.cat((all_grads, self.pix_grads),dim=1)
+            if self.pixel_basis: all_grads = torch.cat((all_grads, self.pix_grads),dim=1) #concat pixel basis
 
             pred = torch.einsum('ij,ijk->ik',coefficients, all_grads.reshape(self.initializations,self.no_modes,-1))
 
-            mse = loss_fn(pred[notnans], t[notnans])
+            mse = loss_fn(pred[notnans], wavefront_derivs[notnans])
 
             reg = torch.norm(coefficients,1) / coefficients.size()[1]
 
@@ -121,12 +123,12 @@ class ModalEvaluator:
         theta = self.aff_model.fill_theta()
         coefficients = coefficients.detach() * norm_factor
 
-        fit_params = {'coefficients': coefficients, 'theta': theta}
+        fit_params = {'coefficients': coefficients, 'theta': theta} # return the fit params
 
-        per_init_loss = (pred[:,notnans[0]] - t[:,notnans[0]]).square().mean(1)
+        per_init_loss = (pred[:,notnans[0]] - wavefront_derivs[:,notnans[0]]).square().mean(1)
         history2['per_init_loss'] = per_init_loss.detach().cpu().numpy()
 
-        self.best_init = torch.argmin(per_init_loss).item()
+        self.best_init = torch.argmin(per_init_loss).item() #store the best initialization
 
         return fit_params, history2
     
@@ -134,15 +136,13 @@ class ModalEvaluator:
 
     def get_wavefront(self, fit_params, microlens_pitch = 150e-6, best_init=None):
         '''
-        return the predicted wavefront and derivatives
+        return the predicted wavefront and derivatives, from the fit params
         '''
-
-        # aff_model = AffineTransformModel(rot=0. transX=-0., transY=-0., initializations = 1, scale=False).to(self.device)
 
         if best_init is None:
             best_init = self.best_init
         
-        theta = fit_params['theta']#[[best_init, best_init+self.initializations]]
+        theta = fit_params['theta']
         coefficients = fit_params['coefficients']
 
 
