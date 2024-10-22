@@ -1,5 +1,7 @@
+# the same as modalevaluator.py, but here i fit multiple initializations of coefficients and affine params at once.
+
 import os, sys, h5py
-main_dir = os.path.abspath('../../')
+main_dir = os.path.abspath('../../../')
 sys.path.append(main_dir)
 from utils.models.affinemodel import AffineTransformModel
 from utils.functions import *
@@ -18,7 +20,7 @@ class ModalEvaluator:
     Here a vortex is always included in the dictionary
     '''
 
-    def __init__(self, size, n_zernike_rows, pixel_basis=False, zern_transform=True, microlens_pitch = 1, device='cuda'):   
+    def __init__(self, size, n_zernike_rows, pixel_basis=False, zern_transform=True, microlens_pitch = 1, initializations=4, device='cuda'):   
     
         self.sizex, self.sizey = size
         xx_pad  = torch.linspace(-2,2,2*self.sizex)
@@ -26,7 +28,7 @@ class ModalEvaluator:
         xx_pad, yy_pad = torch.meshgrid(xx_pad,yy_pad)
 
         # create the dictionary
-        dictionary, dictionary_grads = get_modes_and_derivs(offset=[0,0], xx=xx_pad, yy=yy_pad, n_zernike=n_zernike_rows,               truncate_circle=False, pixel_basis = False)
+        dictionary, dictionary_grads = get_modes_and_derivs(offset=[0,0], xx=xx_pad, yy=yy_pad, n_zernike=n_zernike_rows, truncate_circle=False, pixel_basis = False)
         self.dictionary_grads = dictionary_grads.permute(1,0,2,3).to(device) / microlens_pitch# (modes,2,nx,ny) 
         self.dictionary = dictionary[:,None].to(device) # (modes,1,nx,ny)
         
@@ -38,6 +40,9 @@ class ModalEvaluator:
             self.pix_grads = pix_grads.permute(1,0,2,3).to(device) / microlens_pitch# (modes,2,nx,ny)
             self.pix = pix[None].to(device) # (1,modes,nx,ny)
 
+            self.pix_grads = self.pix_grads[None].tile(initializations,1,1,1,1)
+            self.pix = self.pix.tile(initializations,1,1,1)
+
             self.pix = torch.nn.functional.pad(self.pix, (self.sizey//2,self.sizey - self.sizey//2,self.sizex//2,self.sizex -self.sizex//2))
 
             self.no_modes += len(pix)
@@ -47,6 +52,7 @@ class ModalEvaluator:
         self.device = device
 
         self.zern_transform = zern_transform
+        self.initializations = initializations
 
 
     def fit(self, wavefront_derivs, epochs = 2000, lr=5e-3, l1_reg = 5e-3, fit_params = None):
@@ -56,17 +62,17 @@ class ModalEvaluator:
 
         we can continue training with fit_params not None
         '''
-        self.aff_model = AffineTransformModel(rot=0., transX=-0., transY=-0., scale=False).to(self.device)
+        self.aff_model = AffineTransformModel(rot=0., transX=-0., transY=-0., initializations = self.initializations, scale=False).to(self.device)
 
         norm_factor = np.abs(np.nan_to_num(wavefront_derivs)).max()
         wavefront_derivs = wavefront_derivs / norm_factor
 
         t = wavefront_derivs.reshape(-1,1)
-        t = torch.tensor(t).permute(1,0).float().to(self.device)
+        t = torch.tensor(t).permute(1,0).tile(self.initializations,1).float().to(self.device)
         notnans = ~torch.isnan(t)
 
         if fit_params is None:
-            coefficients = torch.nn.Parameter(torch.rand(1,self.no_modes).to(self.device))
+            coefficients = torch.nn.Parameter(torch.rand(self.initializations,self.no_modes).to(self.device))
         else:
             coefficients = fit_params['coefficients']
             coefficients = torch.nn.Parameter(coefficients.to(self.device) / norm_factor)
@@ -85,10 +91,10 @@ class ModalEvaluator:
             optimizer.zero_grad()
 
             all_grads = self.aff_model(self.dictionary_grads)[...,self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2]
+            
+            if self.pixel_basis: all_grads = torch.cat((all_grads, self.pix_grads),dim=1)
 
-            if self.pixel_basis: all_grads = torch.cat((all_grads, self.pix_grads),dim=0)
-
-            pred = (coefficients @ all_grads.reshape(self.no_modes,-1))
+            pred = torch.einsum('ij,ijk->ik',coefficients, all_grads.reshape(self.initializations,self.no_modes,-1))
 
             mse = loss_fn(pred[notnans], t[notnans])
 
@@ -117,30 +123,43 @@ class ModalEvaluator:
 
         fit_params = {'coefficients': coefficients, 'theta': theta}
 
+        per_init_loss = (pred[:,notnans[0]] - t[:,notnans[0]]).square().mean(1)
+        history2['per_init_loss'] = per_init_loss.detach().cpu().numpy()
+
+        self.best_init = torch.argmin(per_init_loss).item()
+
         return fit_params, history2
     
 
-    def get_wavefront(self, fit_params, microlens_pitch = 150e-6):
+
+    def get_wavefront(self, fit_params, microlens_pitch = 150e-6, best_init=None):
         '''
         return the predicted wavefront and derivatives
         '''
 
-        coefficients = fit_params['coefficients']
-        theta = fit_params['theta']
+        # aff_model = AffineTransformModel(rot=0. transX=-0., transY=-0., initializations = 1, scale=False).to(self.device)
+
+        if best_init is None:
+            best_init = self.best_init
         
+        theta = fit_params['theta']#[[best_init, best_init+self.initializations]]
+        coefficients = fit_params['coefficients']
+
+
         self.aff_model.set_theta(theta)
 
         all_grads = self.aff_model(self.dictionary_grads)[...,self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2]
-        if self.pixel_basis: all_grads = torch.cat((all_grads, self.pix_grads),dim=0)
-        pred = (coefficients @ all_grads.reshape(self.no_modes,-1))
+        if self.pixel_basis: all_grads = torch.cat((all_grads, self.pix_grads),dim=1)
 
-        pred_derivs = pred.reshape(2,self.sizex,self.sizey).detach().cpu().numpy()
+        pred = torch.einsum('ij,ijk->ik',coefficients, all_grads.reshape(self.initializations,self.no_modes,-1))
 
-        all_modes = self.aff_model(self.dictionary).permute(1,0,2,3)
+        pred_derivs = pred[best_init].reshape(2,self.sizex,self.sizey).detach().cpu().numpy()
+
+        all_modes = self.aff_model(self.dictionary)[:,:,0]
 
         if self.pixel_basis: all_modes = torch.cat((all_modes, self.pix),dim=1)
         
-        pred_wavefront = torch.sum(coefficients[:,:,None,None] * all_modes,dim=(0,1))[self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2].detach().cpu().numpy()
+        pred_wavefront = torch.sum(coefficients[best_init,:,None,None] * all_modes[best_init] ,dim=(0))[self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2].detach().cpu().numpy()
 
         pred_wavefront *= microlens_pitch/2
 

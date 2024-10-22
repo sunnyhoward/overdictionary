@@ -7,9 +7,10 @@ class AffineTransformModel(nn.Module):
     '''
     A model that can apply seperate rotations and translations in certain regions. 
     '''
-    def __init__(self, rot=20., transX=0., transY=0., num_grids=2, scale=True,):
+    def __init__(self, rot=20., transX=0., transY=0., initializations=1, scale=True,):
         super().__init__()
 
+        num_grids = 2*initializations
 
         self.transX_list = nn.Parameter(torch.tensor([transX] * num_grids))
         self.transY_list = nn.Parameter(torch.tensor([transY] * num_grids))
@@ -24,21 +25,26 @@ class AffineTransformModel(nn.Module):
 
         self.scale=scale
         self.relu = nn.ReLU()
+        self.initializations = initializations
 
 
     def forward(self, x):
         '''
         x will be the mode derivatives, in shape (modes,2, nx,ny)
+
+        #now instead of just 2 grids, we have 2n. Lets say the first n are for the zerns. 
+
         '''
         no_modes, s, sizex, sizey = x.size()
-        x_zer = x[:-1].reshape(1,s*(no_modes-1),sizex,sizey)
-        x_special = x[-1].reshape(1,s,sizex,sizey)
+        x_zer = x[:-1].reshape(1,s*(no_modes-1),sizex,sizey).tile(self.initializations,1,1,1)
+        x_special = x[-1].reshape(1,s,sizex,sizey).tile(self.initializations,1,1,1)
 
         theta = self.fill_theta()
 
-        transformed_x_zer = self.transform(x_zer, theta[:1])
-        transformed_x_special = self.transform(x_special, theta[1:])
-        transformed_x = torch.cat([transformed_x_zer, transformed_x_special], dim=1).reshape(no_modes,s,sizex,sizey)
+        transformed_x_zer = self.transform(x_zer, theta[:self.initializations])
+        transformed_x_special = self.transform(x_special, theta[self.initializations:])
+
+        transformed_x = torch.cat([transformed_x_zer, transformed_x_special], dim=1).reshape(self.initializations, no_modes,s,sizex,sizey)
 
         return transformed_x
 
