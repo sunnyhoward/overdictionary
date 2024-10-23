@@ -27,7 +27,7 @@ class ModalEvaluator:
 
         # create the dictionary
         dictionary, dictionary_grads = get_modes_and_derivs(offset=[0,0], xx=xx_pad, yy=yy_pad, n_zernike=n_zernike_rows, truncate_circle=False, pixel_basis = False)
-        self.dictionary_grads = dictionary_grads.permute(1,0,2,3).to(device) / microlens_pitch# (modes,2,nx,ny) 
+        self.dictionary_grads = dictionary_grads.permute(1,0,2,3).to(device) / microlens_pitch * 2# (modes,2,nx,ny) they were defined on a grid 2x as big
         self.dictionary = dictionary[:,None].to(device) # (modes,1,nx,ny)
         self.no_modes = len(dictionary)
 
@@ -98,7 +98,7 @@ class ModalEvaluator:
             optimizer.zero_grad()
 
             # take the modes and shift according to affine params.
-            all_grads = self.aff_model(self.dictionary_grads)[...,self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2]
+            all_grads = self.aff_model(self.dictionary_grads)[...,self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2] 
             
             if self.pixel_basis: all_grads = torch.cat((all_grads, self.pix_grads),dim=1) #concat pixel basis
 
