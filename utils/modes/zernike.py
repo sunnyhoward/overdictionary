@@ -36,13 +36,12 @@ def Zernike(n_zernike_row, xx, yy, x0=0, y0=0, truncate_circle = False):
 
     nx, ny = xx.shape[0], xx.shape[1]
     
+    if truncate_circle: nans = (xx**2+yy**2)**.5>1
+
     xx = xx - x0
     yy = yy - y0
 
     rr = (xx**2+yy**2)**.5
-    if truncate_circle==True:
-        xx[rr>1]=0
-        yy[rr>1]=0
 
     (m_max, n_max) = n_max, n_max
 
@@ -105,6 +104,10 @@ def Zernike(n_zernike_row, xx, yy, x0=0, y0=0, truncate_circle = False):
     size = xx.shape
     dUdy /= (size[0] - 1)/2
     dUdx /= (size[1] - 1)/2
+    if truncate_circle:
+        U[:,nans] = torch.nan
+        dUdx[:,nans] = torch.nan
+        dUdy[:,nans] = torch.nan
 
     return(U, dUdx, dUdy)
 

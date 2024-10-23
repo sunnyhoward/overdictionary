@@ -6,22 +6,26 @@ import torch.nn.functional as F
 class AffineTransformModel(nn.Module):
     '''
     A model that can apply seperate rotations and translations in certain regions. 
+    
+    rot, transX and transY should be lists of length initializaitons, where you state the initial params
+    for the affine model. rot is in deg
     '''
-    def __init__(self, rot=20., transX=0., transY=0., initializations=1, scale=True,):
+
+    def __init__(self, rot=[20.], transX=[0.], transY=[0.], scale=False,):
         super().__init__()
 
-        num_grids = 2*initializations
+        initializations = len(rot)
 
-        self.transX_list = nn.Parameter(torch.tensor([transX] * num_grids))
-        self.transY_list = nn.Parameter(torch.tensor([transY] * num_grids))
+        self.transX_list = nn.Parameter(torch.tensor(list(transX) * 2))
+        self.transY_list = nn.Parameter(torch.tensor(list(transY) * 2))
         if scale:
             print('not done')
             self.scaleX_list = nn.Parameter([torch.tensor([1., 0.])])
             self.scaleY_list = nn.Parameter([torch.tensor([0., 1.])])
-        else: self.rot_list = nn.Parameter(torch.deg2rad(torch.tensor([rot]*num_grids)))
+        else: self.rot_list = nn.Parameter(torch.deg2rad(torch.tensor(list(rot) * 2)))
 
 
-        self.theta = nn.Parameter(torch.zeros(num_grids, 2, 3), requires_grad = False)#.to(device)
+        self.theta = nn.Parameter(torch.zeros(initializations*2, 2, 3), requires_grad = False)#.to(device)
 
         self.scale=scale
         self.relu = nn.ReLU()

@@ -53,13 +53,17 @@ class ModalEvaluator:
         self.initializations = initializations
 
 
-    def fit(self, wavefront_derivs, epochs = 2000, lr=5e-3, l1_reg = 5e-3, fit_params = None):
+    def fit(self, wavefront_derivs, affine_initialization = [[0.], [0.], [0.]], epochs = 2000, lr=5e-3, l1_reg = 5e-3, fit_params = None):
         ''' 
         fit our modal coefficients and affine parameters to the wavefront derivatives.
         wavefront_derivs is (2, nx, ny)
 
         we can continue training with fit_params not None
+
+        affine_initialization is [[rot], [transX], [transY]]
         '''
+        self.space_nans = torch.isnan(wavefront_derivs[0]) 
+
         # first prepare the measured wavefront derivatives
         norm_factor = np.abs(np.nan_to_num(wavefront_derivs)).max()
         wavefront_derivs = wavefront_derivs / norm_factor
@@ -69,7 +73,9 @@ class ModalEvaluator:
         notnans = ~torch.isnan(wavefront_derivs)
 
         # now set up the affine model and the coefficients
-        self.aff_model = AffineTransformModel(rot=0., transX=-0., transY=-0., initializations = self.initializations, scale=False).to(self.device)
+        rot, transX, transY = affine_initialization
+        if len(rot) != self.initializations: raise ValueError('affine params must have the same length as initializations')
+        self.aff_model = AffineTransformModel(rot=rot, transX=transX, transY=transY).to(self.device)
         if fit_params is None:
             coefficients = torch.nn.Parameter(torch.rand(self.initializations,self.no_modes).to(self.device))
         else:
@@ -115,6 +121,8 @@ class ModalEvaluator:
                     self.aff_model.rot_list.data[0] = 0
                     self.aff_model.transX_list.data[0] = 0
                     self.aff_model.transY_list.data[0] = 0
+                
+                else: self.aff_model.rot_list.data[:self.initializations] = 0 #no need to rotate zernikes
                 
             print(f'Epoch {epoch}/{epochs}:, train mse: {mse:5.5g}, train reg: {reg*l1_reg:5.5g}',end='\r')
 
@@ -162,5 +170,8 @@ class ModalEvaluator:
         pred_wavefront = torch.sum(coefficients[best_init,:,None,None] * all_modes[best_init] ,dim=(0))[self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2].detach().cpu().numpy()
 
         pred_wavefront *= microlens_pitch/2
+
+        pred_derivs[...,self.space_nans] = torch.nan
+        pred_wavefront[self.space_nans] = torch.nan
 
         return pred_wavefront, pred_derivs

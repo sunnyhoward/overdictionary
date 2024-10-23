@@ -16,9 +16,10 @@ def Vortex(m, xx, yy, x0=0, y0=0, truncate_circle = True):
     # dUdx, dUdy = torch.gradient(U)
 
     if truncate_circle==True:
-        U[rr>1]=0
-        dUdx[rr>1]=0
-        dUdy[rr>1]=0
+        rr_nan = ((xx)**2+(yy)**2)**.5
+        U[rr_nan>1]=torch.nan
+        dUdx[rr_nan>1]=torch.nan
+        dUdy[rr_nan>1]=torch.nan
 
     size = xx.shape
     dUdy /= (size[0] - 1)/2
