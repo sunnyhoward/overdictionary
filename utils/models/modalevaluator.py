@@ -169,7 +169,7 @@ class ModalEvaluator:
         
         pred_wavefront = torch.sum(coefficients[best_init,:,None,None] * all_modes[best_init] ,dim=(0))[self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2].detach().cpu().numpy()
 
-        pred_wavefront *= microlens_pitch/2
+        pred_wavefront *= microlens_pitch
 
         pred_derivs[...,self.space_nans] = torch.nan
         pred_wavefront[self.space_nans] = torch.nan
