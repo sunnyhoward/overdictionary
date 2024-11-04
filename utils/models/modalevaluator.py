@@ -171,22 +171,19 @@ class ModalEvaluator:
 
         all_modes = self.aff_model(self.dictionary)[:,:,0]
 
+
         zern_contribution = (coefficients[best_init,:self.n_zernikes,None,None] * all_modes[best_init, :self.n_zernikes]).sum(0)
-
-        pixel_contribution = (coefficients[best_init,self.n_zernikes+1:,None,None] * self.pix[best_init]).sum(0)
-
-        special_contribution = coefficients[best_init,self.n_zernikes,None,None] *  all_modes[best_init, self.n_zernikes] 
-
-
-        # if self.special_mode == Vortex:
-        #     special_contribution = (special_contribution + torch.pi) % (2 * torch.pi) - torch.pi
-            
-
-
-        # if self.pixel_basis: all_modes = torch.cat((all_modes, self.pix),dim=1)
         
-        # pred_wavefront = torch.sum(coefficients[best_init,:,None,None] * all_modes[best_init] ,dim=(0))[self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2].detach().cpu().numpy()
-        pred_wavefront = (zern_contribution + pixel_contribution + special_contribution)[self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2].detach().cpu().numpy()
+        special_contribution = coefficients[best_init,self.n_zernikes,None,None] *  all_modes[best_init, self.n_zernikes] 
+        
+        pred_wavefront = zern_contribution + special_contribution
+        
+        if self.pixel_basis:
+            pixel_contribution = (coefficients[best_init,self.n_zernikes+1:,None,None] * self.pix[best_init]).sum(0)
+            pred_wavefront += pixel_contribution
+
+
+        pred_wavefront = pred_wavefront[self.sizex//2:3*self.sizex//2,self.sizey//2:3*self.sizey//2].detach().cpu().numpy()
 
         pred_wavefront *= microlens_pitch
 
