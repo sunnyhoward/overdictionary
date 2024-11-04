@@ -32,6 +32,8 @@ def Axicon(xx, yy, x0=0, y0=0, truncate_circle = False):
     dUdy = (yy-y0)/(rr)
     dUdx = (xx-x0)/(rr)
 
+    U -= U.mean()
+
     if truncate_circle==True:
         rr_nan = ((xx)**2+(yy)**2)**.5
         U[rr_nan>1]=torch.nan
