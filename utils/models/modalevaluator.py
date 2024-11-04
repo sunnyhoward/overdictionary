@@ -178,8 +178,8 @@ class ModalEvaluator:
         special_contribution = coefficients[best_init,self.n_zernikes,None,None] *  all_modes[best_init, self.n_zernikes] 
 
 
-        if self.special_mode == Vortex:
-            special_contribution = (special_contribution + torch.pi) % (2 * torch.pi) - torch.pi
+        # if self.special_mode == Vortex:
+        #     special_contribution = (special_contribution + torch.pi) % (2 * torch.pi) - torch.pi
             
 
 
