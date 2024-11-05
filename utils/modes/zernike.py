@@ -102,8 +102,12 @@ def Zernike(n_zernike_row, xx, yy, x0=0, y0=0, truncate_circle = False):
     U, dUdx, dUdy = keep_zernikes(n_zernike_row, U, dUdx, dUdy)
 
     size = xx.shape
-    dUdy /= (size[0] - 1)/2
-    dUdx /= (size[1] - 1)/2
+    # scale the derivatives so microlens pitch = 1. Currently microlens pitch is 
+    old_pitch = (xx[1,1] - xx[0,0]).abs()
+    
+    dUdy *= old_pitch
+    dUdx *= old_pitch
+
     if truncate_circle:
         U[:,nans] = torch.nan
         dUdx[:,nans] = torch.nan

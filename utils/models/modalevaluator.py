@@ -30,7 +30,7 @@ class ModalEvaluator:
         # create the dictionary
         dictionary, dictionary_grads = get_modes_and_derivs(offset=[0,0], xx=xx_pad, yy=yy_pad, n_zernike=n_zernike_rows, truncate_circle=False, pixel_basis = False,
                                                             special_mode = special_mode)
-        self.dictionary_grads = dictionary_grads.permute(1,0,2,3).to(device) / microlens_pitch * 2# (modes,2,nx,ny) they were defined on a grid 2x as big
+        self.dictionary_grads = dictionary_grads.permute(1,0,2,3).to(device) / microlens_pitch# (modes,2,nx,ny) they were defined on a grid 2x as big
         self.dictionary = dictionary[:,None].to(device) # (modes,1,nx,ny)
         self.no_modes = len(dictionary)
 

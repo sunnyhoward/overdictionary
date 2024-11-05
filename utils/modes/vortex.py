@@ -21,8 +21,10 @@ def Vortex(xx, yy, x0=0, y0=0, truncate_circle = True):
         dUdx[rr_nan>1]=torch.nan
         dUdy[rr_nan>1]=torch.nan
 
-    size = xx.shape
-    dUdy /= (size[0] - 1)/2
-    dUdx /= (size[1] - 1)/2
+    # scale the derivatives so microlens pitch = 1. Currently microlens pitch is 
+    old_pitch = (xx[1,1] - xx[0,0]).abs()
+    
+    dUdy *= old_pitch
+    dUdx *= old_pitch
 
     return(U.unsqueeze(0), dUdx.unsqueeze(0), dUdy.unsqueeze(0))
