@@ -20,7 +20,7 @@ class ModalEvaluator:
     '''
 
     def __init__(self, size, n_zernike_rows, pixel_basis=False, zern_transform=True, microlens_pitch = 1, initializations=4, 
-                        special_mode = Vortex, device='cuda'):   
+                        special_mode = Vortex, use_zern=True, device='cuda'):   
     
         self.sizex, self.sizey = size
         xx_pad  = torch.linspace(-2,2,2*self.sizex)
@@ -55,6 +55,7 @@ class ModalEvaluator:
         self.zern_transform = zern_transform
         self.initializations = initializations
         self.special_mode = special_mode
+        self.use_zern = use_zern
 
 
     def fit(self, wavefront_derivs, affine_initialization = [[0.], [0.], [0.]], epochs = 2000, lr=5e-3, l1_reg = 5e-3, fit_params = None):
@@ -129,6 +130,9 @@ class ModalEvaluator:
                     self.aff_model.transY_list.data[0] = 0
                 
                 else: self.aff_model.rot_list.data[:self.initializations] = 0 #no need to rotate zernikes
+
+                if not self.use_zern:
+                    coefficients.data[:,:self.n_zernikes] = 0
                 
             print(f'Epoch {epoch}/{epochs}:, train mse: {mse:5.5g}, train reg: {reg*l1_reg:5.5g}',end='\r')
 
